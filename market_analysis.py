@@ -675,9 +675,79 @@ class IndexOptionsAnalyzer:
         # Calculate days between now and expiry  
         pass
 
+# Add this at the top of market_analysis.py, with your other imports
+from dataclasses import dataclass
+from typing import Dict, Any, List, Optional
+import logging
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+@dataclass
+class MarketDataConfig:
+    """Configuration parameters for market data analysis"""
+    risk_free_rate: float = 0.07
+    vix_threshold: float = 20.0
+    default_expiry_days: int = 30
+
+@dataclass
+class RiskParameters:
+    """Risk management parameters"""
+    position_loss_limit: float
+    daily_loss_limit: float
+    profit_targets: Dict[str, float]
+    stop_loss: Dict[str, float]
+
+@dataclass
+class PositionSizing:
+    """Position sizing parameters"""
+    base_lots: int
+    max_positions: int
+    scaling_rules: str
+    volatility_adjustment: float
+
+@dataclass
+class MarketCondition:
+    """Market condition parameters"""
+    trend: str
+    rsi: float
+    vix: float
+    put_call_ratio: float
+    
+    @property
+    def volatility_regime(self) -> str:
+        """Determine volatility regime"""
+        if self.vix > 25:
+            return "High"
+        elif self.vix > 15:
+            return "Normal"
+        return "Low"
+
+# Now your OptionsStrategyGenerator class can use RiskParameters
 class OptionsStrategyGenerator:
-    def __init__(self, vix_threshold: float = 20):  
+    """Generate trading strategies with comprehensive risk management"""
+
+    def __init__(self, vix_threshold: float = 20.0):
         self.vix_threshold = vix_threshold
+        self.base_position_size = 75  # Base lot size
+
+    def _generate_risk_parameters(self, vix: float) -> RiskParameters:
+        """Generate risk management parameters"""
+        volatility_factor = vix / self.vix_threshold
+        
+        return RiskParameters(
+            position_loss_limit=min(15 * volatility_factor, 25),
+            daily_loss_limit=min(5 * volatility_factor, 10),
+            profit_targets={
+                'first_target': 20 * volatility_factor,
+                'final_target': 35 * volatility_factor
+            },
+            stop_loss={
+                'initial': 10 * volatility_factor,
+                'trailing': 15 * volatility_factor
+            }
+        )
+
 
     def generate_trading_strategy(
         self,
@@ -736,22 +806,6 @@ class OptionsStrategyGenerator:
         return PositionSizing(
             base_lots=base_lots,
             volatility_adjustment=min(1, self.vix_threshold / vix)
-        )
-    
-    def _generate_risk_parameters(
-        self, 
-        strategy_greeks: Dict[str, float],
-        strategy_vega: float  
-    ) -> RiskParameters:
-        
-        # Adjust risk based on Greeks
-        stop_loss = min(0.2, 2 * abs(strategy_greeks['theta']))
-        profit_target = min(0.5, 3 * abs(strategy_greeks['delta']))
-
-        return RiskParameters(
-            stop_loss=stop_loss,  
-            profit_target=profit_target,
-            max_vega=strategy_vega / 10
         )
 
     def _extract_market_condition(self, market_data: Dict[str, Any]) -> Dict[str, Any]:
