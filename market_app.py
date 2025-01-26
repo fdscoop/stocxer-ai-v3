@@ -70,35 +70,78 @@ class MarketAnalysisService:
 def register_routes(app: Flask, analysis_service: MarketAnalysisService) -> None:
     """Register application routes"""
     
-    @app.route('/health')
-    def health_check():
+    @app.route('/')
+    def index():
+        """Root endpoint with API information"""
         return jsonify(APIResponse(
             status='success',
+            data={
+                'api_version': '1.0',
+                'description': 'StocXer AI Market Analysis API',
+                'endpoints': {
+                    'health': {
+                        'path': '/health',
+                        'method': 'GET',
+                        'description': 'Health check endpoint'
+                    },
+                    'analyze': {
+                        'path': '/api/v1/analyze',
+                        'method': 'POST',
+                        'description': 'Market analysis endpoint',
+                        'required_payload': {
+                            'current_market': {
+                                'index': {'ltp': 'float'},
+                                'vix': {'ltp': 'float'}
+                            },
+                            'options': 'object'
+                        }
+                    },
+                    'strategy': {
+                        'path': '/api/v1/strategy',
+                        'method': 'POST',
+                        'description': 'Strategy generation endpoint',
+                        'required_payload': {
+                            'market_data': 'object',
+                            'technical_analysis': 'object',
+                            'options_data': 'object'
+                        }
+                    }
+                }
+            }
+        ).to_dict()), 200
+
+    @app.route('/health')
+    def health_check():
+        """Health check endpoint"""
+        return jsonify(APIResponse(
+            status='success', 
             message='Service is healthy'
         ).to_dict()), 200
 
     @app.route('/api/v1/analyze', methods=['POST'])
-    @validate_request
+    @validate_request  
     @log_request
     def analyze_market():
+        """Market analysis endpoint""" 
         try:
             payload = request.get_json()
             
+            # Validate market data
             if not validate_market_data(payload):
                 return jsonify(APIResponse(
                     status='error',
-                    error='Invalid market data format'
+                    error='Invalid market data format'  
                 ).to_dict()), 400
 
             analysis_results = analysis_service.analyze_market(payload)
             
             return jsonify(APIResponse(
                 status='success',
-                data=analysis_results
+                data=analysis_results  
             ).to_dict()), 200
 
         except Exception as e:
-            logger.exception(f"Error in /analyze: {str(e)}")
+            logger.exception(f"Error in /analyze: {str(e)}")  
             return jsonify(APIResponse(
                 status='error',
                 error='Analysis processing error'
@@ -106,14 +149,16 @@ def register_routes(app: Flask, analysis_service: MarketAnalysisService) -> None
 
     @app.route('/api/v1/strategy', methods=['POST'])
     @validate_request
-    @log_request
+    @log_request  
     def generate_strategy():
-        try:
+        """Strategy generation endpoint"""
+        try:  
             payload = request.get_json()
             
-            if not validate_strategy_request(payload):
+            # Validate strategy request
+            if not validate_strategy_request(payload): 
                 return jsonify(APIResponse(
-                    status='error',
+                    status='error',  
                     error='Invalid strategy request format'
                 ).to_dict()), 400
 
@@ -128,7 +173,7 @@ def register_routes(app: Flask, analysis_service: MarketAnalysisService) -> None
             logger.exception(f"Error in /strategy: {str(e)}")
             return jsonify(APIResponse(
                 status='error',
-                error='Strategy generation error'
+                error='Strategy generation error' 
             ).to_dict()), 500
 
 def create_app(config: Optional[Dict[str, Any]] = None) -> Flask:
