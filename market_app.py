@@ -30,38 +30,77 @@ class MarketAnalysisService:
     def analyze_market(self, payload: dict) -> dict:
         """Process market analysis"""
         try:
-            # Create analyzer instance with current payload
-            market_analyzer = MarketAnalyzer(payload)
+            logger.info("Starting market analysis with payload structure")
+            logger.info(f"Payload keys: {list(payload.keys())}")
             
-            # Extract main data points
+            # Validate payload structure
+            required_keys = ['current_market', 'historical_data', 'options']
+            missing_keys = [key for key in required_keys if key not in payload]
+            if missing_keys:
+                logger.error(f"Missing required keys in payload: {missing_keys}")
+                raise ValueError(f"Missing required keys: {missing_keys}")
+
+            # Log detailed structure
             current_market = payload.get('current_market', {})
             index_data = current_market.get('index', {})
             vix_data = current_market.get('vix', {})
             
-            # Get LTP values
-            index_ltp = float(index_data.get('ltp', 0))
-            vix_ltp = float(vix_data.get('ltp', 0))
+            logger.info("Processing index data:")
+            logger.info(f"Index LTP: {index_data.get('ltp')}")
+            logger.info(f"VIX LTP: {vix_data.get('ltp')}")
             
-            # Perform analysis
-            market_structure = market_analyzer.analyze_market_structure(payload)
-            technical_analysis = market_analyzer.analyze_technical_indicators(payload)
+            # Create analyzer instance with current payload
+            logger.info("Creating MarketAnalyzer instance")
+            market_analyzer = MarketAnalyzer(payload)
             
-            # Process options data
-            options_data = self.options_analyzer.analyze_options_chain(
-                index_ltp,
-                payload.get('options', {}),
-                payload.get('current_market', {}).get('futures', {}),
-                vix_ltp
-            )
+            # Extract main data points and convert to float
+            try:
+                index_ltp = float(index_data.get('ltp', 0))
+                vix_ltp = float(vix_data.get('ltp', 0))
+            except (TypeError, ValueError) as e:
+                logger.error(f"Error converting LTP values: {e}")
+                raise ValueError(f"Invalid LTP values: index={index_data.get('ltp')}, vix={vix_data.get('ltp')}")
             
-            # Generate strategy
-            trading_strategy = self.strategy_generator.generate_trading_strategy(
-                payload,
-                options_data.get('optimal_options', {}),
-                technical_analysis
-            )
+            # Perform analysis with error catching for each step
+            logger.info("Starting market structure analysis")
+            try:
+                market_structure = market_analyzer.analyze_market_structure(payload)
+            except Exception as e:
+                logger.error(f"Error in market structure analysis: {e}")
+                raise
             
-            return {
+            logger.info("Starting technical analysis")
+            try:
+                technical_analysis = market_analyzer.analyze_technical_indicators(payload)
+            except Exception as e:
+                logger.error(f"Error in technical analysis: {e}")
+                raise
+            
+            logger.info("Processing options data")
+            try:
+                options_data = self.options_analyzer.analyze_options_chain(
+                    index_ltp,
+                    payload.get('options', {}),
+                    payload.get('current_market', {}).get('futures', {}),
+                    vix_ltp
+                )
+            except Exception as e:
+                logger.error(f"Error in options analysis: {e}")
+                raise
+            
+            logger.info("Generating trading strategy")
+            try:
+                trading_strategy = self.strategy_generator.generate_trading_strategy(
+                    payload,
+                    options_data.get('optimal_options', {}),
+                    technical_analysis
+                )
+            except Exception as e:
+                logger.error(f"Error in strategy generation: {e}")
+                raise
+            
+            # Prepare and return results
+            analysis_results = {
                 'timestamp': datetime.now().isoformat(),
                 'market_structure': market_structure,
                 'technical_analysis': technical_analysis,
@@ -69,8 +108,12 @@ class MarketAnalysisService:
                 'trading_strategy': trading_strategy
             }
             
+            logger.info("Analysis completed successfully")
+            return analysis_results
+            
         except Exception as e:
             logger.error(f"Analysis error: {str(e)}")
+            logger.error(f"Error traceback: {e.__traceback__}")
             raise
 
 def create_app(config=None):
