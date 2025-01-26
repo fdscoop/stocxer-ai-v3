@@ -33,21 +33,21 @@ class MarketAnalysisService:
             logger.info("Starting market analysis with payload structure")
             logger.info(f"Payload keys: {list(payload.keys())}")
             
-            # Validate top-level structure
-            if 'current_market' not in payload or 'historical_data' not in payload:
-                raise ValueError("Missing required top-level keys: current_market, historical_data")
-
-            # Extract and validate market data
+            # Extract market data
             current_market = payload.get('current_market', {})
+            
+            # Extract specific components
             index_data = current_market.get('index', {})
             vix_data = current_market.get('vix', {})
+            futures_data = current_market.get('futures', {})
             options_data = current_market.get('options', {})
             
             logger.info("Market data validation:")
             logger.info(f"Index data present: {bool(index_data)}")
             logger.info(f"VIX data present: {bool(vix_data)}")
+            logger.info(f"Futures data present: {bool(futures_data)}")
             logger.info(f"Options data present: {bool(options_data)}")
-            
+
             # Validate required fields
             if not all([index_data, vix_data, options_data]):
                 raise ValueError("Missing required market data components")
@@ -61,7 +61,7 @@ class MarketAnalysisService:
                 logger.error(f"Error converting LTP values: {e}")
                 raise ValueError(f"Invalid LTP values: index={index_data.get('ltp')}, vix={vix_data.get('ltp')}")
 
-            # Create analyzer with current payload
+            # Create analyzer instance
             logger.info("Creating MarketAnalyzer instance")
             market_analyzer = MarketAnalyzer(payload)
             
@@ -73,10 +73,12 @@ class MarketAnalysisService:
             technical_analysis = market_analyzer.analyze_technical_indicators(payload)
             
             logger.info("Processing options chain")
+            logger.info(f"Processing options chain - Parameters: index_ltp={index_ltp}, vix_ltp={vix_ltp}")
+            
+            # Process options chain with correct number of arguments
             options_chain = self.options_analyzer.analyze_options_chain(
                 index_ltp,
-                options_data,  # Using options data from current_market
-                current_market.get('futures', {}),
+                options_data,
                 vix_ltp
             )
             
@@ -94,10 +96,13 @@ class MarketAnalysisService:
                 'technical_analysis': technical_analysis,
                 'options_analysis': options_chain,
                 'trading_strategy': trading_strategy,
+                'market_metrics': payload.get('market_metrics', {}),
                 'summary': {
                     'index_price': index_ltp,
                     'vix_level': vix_ltp,
-                    'trend': market_structure.get('trend_analysis', {}).get('overall', {}).get('direction', 'Neutral')
+                    'trend': market_structure.get('trend_analysis', {}).get('overall', {}).get('direction', 'Neutral'),
+                    'pcr_volume': payload.get('market_metrics', {}).get('volume_pcr', 0),
+                    'pcr_oi': payload.get('market_metrics', {}).get('oi_pcr', 0)
                 }
             }
             
@@ -106,9 +111,9 @@ class MarketAnalysisService:
             
         except Exception as e:
             logger.error(f"Analysis error: {str(e)}")
-            logger.error(f"Error details:", exc_info=True)
+            logger.error("Error details:", exc_info=True)
             raise
-        
+
 def create_app(config=None):
     """Create and configure the Flask application"""
     app = Flask(__name__)
@@ -207,14 +212,8 @@ def create_app(config=None):
         """Market analysis endpoint"""
         try:
             payload = request.get_json()
+            logger.info("Received analysis request")
             
-            # Validate market data
-            if not validate_market_data(payload):
-                return jsonify(APIResponse(
-                    status='error',
-                    error='Invalid market data format'
-                ).to_dict()), 400
-
             # Perform analysis
             analysis_results = analysis_service.analyze_market(payload)
             
@@ -223,11 +222,22 @@ def create_app(config=None):
                 data=analysis_results
             ).to_dict()), 200
 
-        except Exception as e:
-            logger.error(f"Analysis error: {str(e)}")
+        except ValueError as e:
+            # Handle validation errors
+            logger.error(f"Validation error: {str(e)}")
             return jsonify(APIResponse(
                 status='error',
-                error='Analysis processing error'
+                error='Validation error',
+                details=str(e)
+            ).to_dict()), 400
+            
+        except Exception as e:
+            # Handle other errors
+            logger.error(f"Analysis error: {str(e)}", exc_info=True)
+            return jsonify(APIResponse(
+                status='error',
+                error='Analysis processing error',
+                details=str(e)
             ).to_dict()), 500
 
     @app.route('/api/v1/strategy', methods=['POST'])
@@ -237,8 +247,9 @@ def create_app(config=None):
         """Strategy generation endpoint"""
         try:
             payload = request.get_json()
+            logger.info("Received strategy request")
             
-            # Use the payload directly for strategy generation
+            # Generate strategy
             strategy = analysis_service.strategy_generator.generate_trading_strategy(
                 payload,
                 payload.get('trading_strategy', {}).get('primary_strategy', {}),
@@ -254,7 +265,8 @@ def create_app(config=None):
             logger.error(f"Strategy generation error: {str(e)}")
             return jsonify(APIResponse(
                 status='error',
-                error='Strategy generation error'
+                error='Strategy generation error',
+                details=str(e)
             ).to_dict()), 500
     
     @app.errorhandler(404)
