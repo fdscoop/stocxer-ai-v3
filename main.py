@@ -2,7 +2,7 @@ import os
 import logging
 from typing import Dict, Any, Optional
 from flask import Flask
-from market_app import create_market_app
+from market_app import create_app as market_create_app  # Updated import
 from flask_compress import Compress
 from flask_talisman import Talisman
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -61,8 +61,6 @@ def configure_sentry(app: Flask) -> None:
             integrations=[FlaskIntegration()],
             traces_sample_rate=1.0,
             environment=app.config['FLASK_ENV'],
-            
-            # Configure performance monitoring
             enable_tracing=True,
             profiles_sample_rate=1.0,
         )
@@ -119,8 +117,8 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> Flask:
     base_config.update(config)
     
     try:
-        # Create app instance
-        app = create_market_app(base_config)
+        # Create app instance using the imported function
+        app = market_create_app(base_config)
         
         # Load configuration
         app.config.from_object(Config)
@@ -142,13 +140,6 @@ def create_app(config: Optional[Dict[str, Any]] = None) -> Flask:
     except Exception as e:
         logger.error(f"Failed to initialize application: {str(e)}")
         raise
-
-def get_database_url() -> str:
-    """Get database URL with SSL configuration for Heroku Postgres"""
-    database_url = os.environ.get('DATABASE_URL')
-    if database_url and database_url.startswith('postgres://'):
-        database_url = database_url.replace('postgres://', 'postgresql://', 1)
-    return database_url
 
 def configure_workers() -> Dict[str, Any]:
     """Configure Gunicorn workers based on environment"""
