@@ -214,26 +214,66 @@ def create_app(config=None):
             payload = request.get_json()
             logger.info("Received analysis request")
             
-            # Perform analysis
-            analysis_results = analysis_service.analyze_market(payload)
+            # Validate market data
+            if not validate_market_data(payload):
+                return jsonify(APIResponse(
+                    status='error',
+                    error='Invalid market data format'
+                ).to_dict()), 400
+
+            # Extract required data
+            current_market = payload.get('current_market', {})
+            index_data = current_market.get('index', {})
+            vix_data = current_market.get('vix', {})
+            options_data = current_market.get('options', {})  # Options data is under current_market
+
+            # Perform market analysis
+            market_structure = market_analyzer.analyze_market_structure(payload)
+            technical_analysis = market_analyzer.analyze_technical_indicators(payload)
+            
+            # Convert values to float
+            index_ltp = float(index_data.get('ltp', 0))
+            vix_ltp = float(vix_data.get('ltp', 0))
+            
+            # Analyze options with the correct number of arguments (3 instead of 4)
+            options_data = options_analyzer.analyze_options_chain(
+                index_ltp,
+                options_data,  # Using options data from current_market
+                vix_ltp
+            )
+            
+            # Generate trading strategy
+            trading_strategy = strategy_generator.generate_trading_strategy(
+                payload,
+                options_data.get('optimal_options', {}),
+                technical_analysis
+            )
+            
+            # Prepare response
+            analysis_results = {
+                'timestamp': datetime.now().isoformat(),
+                'market_structure': market_structure,
+                'technical_analysis': technical_analysis,
+                'options_analysis': options_data,
+                'trading_strategy': trading_strategy,
+                'market_metrics': payload.get('market_metrics', {}),
+                'summary': {
+                    'index_price': index_ltp,
+                    'vix_level': vix_ltp,
+                    'trend': market_structure.get('trend_analysis', {}).get('overall', {}).get('direction', 'Neutral'),
+                    'pcr_volume': payload.get('market_metrics', {}).get('volume_pcr', 0),
+                    'pcr_oi': payload.get('market_metrics', {}).get('oi_pcr', 0)
+                }
+            }
             
             return jsonify(APIResponse(
                 status='success',
                 data=analysis_results
             ).to_dict()), 200
 
-        except ValueError as e:
-            # Handle validation errors
-            logger.error(f"Validation error: {str(e)}")
-            return jsonify(APIResponse(
-                status='error',
-                error='Validation error',
-                details=str(e)
-            ).to_dict()), 400
-            
         except Exception as e:
-            # Handle other errors
-            logger.error(f"Analysis error: {str(e)}", exc_info=True)
+            logger.error(f"Analysis error: {str(e)}")
+            logger.error("Error details:", exc_info=True)
             return jsonify(APIResponse(
                 status='error',
                 error='Analysis processing error',
