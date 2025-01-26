@@ -727,7 +727,7 @@ class OptionsStrategyGenerator:
         else:
             return self._create_range_bound_strategy(optimal_options)
             
-    def _calculate_position_sizing(self, strategy_type: str, vix: float) -> PositionSizing:
+    def _calculate_position_sizing(self, strategy_type: str, vix: float) -> Dict[str, Any]:
         base_lots = self.base_position_size
         
         if vix > self.vix_threshold:
