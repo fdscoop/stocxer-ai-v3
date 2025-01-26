@@ -9,3 +9,7 @@ werkzeug
 itsdangerous
 click
 importlib-metadata
+Flask-Compress
+Flask-Talisman
+sentry-sdk[flask]
+gevent
