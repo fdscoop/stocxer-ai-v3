@@ -747,43 +747,39 @@ class MarketAnalysisService:
                 }
             }
 
-    def _analyze_single_expiry(self,
-                             expiry: str,
-                             expiry_data: Dict[str, Any],
-                             index_ltp: float,
-                             vix_value: float) -> Dict[str, Any]:
-        """Analyze options for a single expiry"""
+    def _analyze_single_expiry(self, 
+                              expiry: str,
+                              expiry_data: Dict[str, Any],
+                              current_price: float,
+                              vix: float) -> Dict[str, Any]:
         try:
+            # Ensure consistent indentation
             calls = expiry_data.get('calls', {})
             puts = expiry_data.get('puts', {})
             
-            # Calculate days to expiry
-            days = self._calculate_days_to_expiry(expiry)
-            
             strikes_analysis = {}
             for strike in set(calls.keys()).union(puts.keys()):
-                call_data = calls.get(strike, {})
-                put_data = puts.get(strike, {})
-                
-                strikes_analysis[strike] = {
-                    'call': self._analyze_single_option(
-                        call_data, 'call', index_ltp, days, vix_value
-                    ),
-                    'put': self._analyze_single_option(
-                        put_data, 'put', index_ltp, days, vix_value
-                    )
-                }
+                strike_analysis = self._analyze_strike(
+                    strike,
+                    calls.get(strike, {}),
+                    puts.get(strike, {}),
+                    current_price
+                )
+                strikes_analysis[strike] = strike_analysis
             
             return {
                 'strikes_analysis': strikes_analysis,
-                'metrics': self._calculate_expiry_metrics(
+                'expiry_metrics': self._calculate_expiry_metrics(
+                    calls, puts, {}  # Placeholder for market_metrics
+                ),
+                'optimal_strikes': self._select_optimal_strikes(
                     strikes_analysis,
-                    index_ltp
+                    current_price
                 )
             }
             
         except Exception as e:
-            logger.error(f"Single expiry analysis error: {e}")
+            logger.error(f"Single expiry analysis error: {e}", exc_info=True)
             return {}
 
     def _analyze_single_option(self,
