@@ -918,11 +918,12 @@ class OptionsDataAnalyzer:
         except Exception as e:
             logger.error(f"Options chain analysis error: {e}", exc_info=True)
             return {}
-    def _analyze_single_expiry(self,
-                             expiry: str,
-                             expiry_data: Dict[str, Any],
-                             current_price: float,
-                             market_metrics: Dict[str, Any]) -> Dict[str, Any]:
+        
+    def _analyze_single_expiry(self, 
+                            expiry: str,
+                            expiry_data: Dict[str, Any],
+                            current_price: float,
+                            market_metrics: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze options data for a single expiry"""
         try:
             calls = expiry_data.get('calls', {})
@@ -948,20 +949,41 @@ class OptionsDataAnalyzer:
                     current_price
                 )
             }
-            
+        
         except Exception as e:
             logger.error(f"Single expiry analysis error: {e}")
             return {}
 
     def _analyze_strike(self,
-                   strike: str,
-                   call_data: Dict[str, Any],
-                   put_data: Dict[str, Any],
-                   current_price: float) -> Dict[str, Any]:
-        """Analyze individual strike price"""
+                    strike: str,
+                    call_data: Dict[str, Any],
+                    put_data: Dict[str, Any],
+                    current_price: float) -> Dict[str, Any]:
+        """
+        Analyze an individual option strike price.
+        
+        Args:
+            strike: Strike price as a string
+            call_data: Call option data dictionary
+            put_data: Put option data dictionary
+            current_price: Current market price
+        
+        Returns:
+            Comprehensive analysis of the strike's options
+        """
         try:
-            strike_price = float(strike)
-            
+            # Validate and convert strike price
+            try:
+                strike_price = float(strike)
+            except (TypeError, ValueError):
+                logger.warning(f"Invalid strike price: {strike}")
+                return {}
+
+            # Validate current price
+            if not isinstance(current_price, (int, float)) or current_price <= 0:
+                logger.warning(f"Invalid current price: {current_price}")
+                return {}
+
             return {
                 'strike_price': strike_price,
                 'moneyness': self._calculate_moneyness(strike_price, current_price),
@@ -969,15 +991,20 @@ class OptionsDataAnalyzer:
                     'ltp': float(call_data.get('ltp', 0)),
                     'volume': int(call_data.get('tradeVolume', 0)),
                     'oi': int(call_data.get('opnInterest', 0)),
-                    'depth': call_data.get('depth', {})
+                    'depth': call_data.get('depth', {}),
+                    'implied_volatility': call_data.get('impliedVolatility', None)
                 },
                 'put': {
                     'ltp': float(put_data.get('ltp', 0)),
                     'volume': int(put_data.get('tradeVolume', 0)),
                     'oi': int(put_data.get('opnInterest', 0)),
-                    'depth': put_data.get('depth', {})
+                    'depth': put_data.get('depth', {}),
+                    'implied_volatility': put_data.get('impliedVolatility', None)
                 }
             }
+        except Exception as e:
+            logger.error(f"Unexpected error in strike analysis: {e}")
+            return {}
 
     def _calculate_moneyness(self, strike: float, current_price: float) -> str:
         """Calculate option moneyness"""
