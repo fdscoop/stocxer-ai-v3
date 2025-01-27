@@ -896,47 +896,32 @@ class MarketAnalysisService:
             return {}
 
 class OptionsDataAnalyzer:
-    def analyze_options_chain(self,
-                            current_price: float,
-                            options_structure: Dict[str, Any],
-                            market_metrics: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze full options chain across all available expiries"""
+    def analyze_options_chain(self, current_price, options_structure, vix):
         try:
-            # Correctly access the byExpiry structure
-            expiries = options_structure.get('options', {}).get('byExpiry', {})
+            # Robust input validation
+            if not isinstance(options_structure, dict):
+                raise ValueError("Invalid options structure")
             
+            # Safe data extraction with type checking
+            options_chain = options_structure.get('options', {}).get('byExpiry', {})
+            
+            if not options_chain:
+                logger.warning("No options data available")
+                return {}
+            
+            # Process with explicit type handling
             expiry_analysis = {}
-            for expiry, expiry_data in expiries.items():
-                # Extract calls and puts from the correct structure
-                calls = expiry_data.get('calls', {})
-                puts = expiry_data.get('puts', {})
-                
-                expiry_analysis[expiry] = self._analyze_single_expiry(
-                    expiry,
-                    {
-                        'calls': calls,
-                        'puts': puts
-                    },
-                    current_price,
-                    market_metrics
-                )
-                        
-            # Find optimal expiry for trading
-            optimal_expiry = self._select_optimal_expiry(expiry_analysis)
+            for expiry, expiry_data in options_chain.items():
+                if isinstance(expiry_data, dict):
+                    expiry_analysis[expiry] = self._analyze_single_expiry(
+                        expiry, expiry_data, current_price, vix
+                    )
             
-            return {
-                'expiry_analysis': expiry_analysis,
-                'optimal_expiry': optimal_expiry,
-                'overall_metrics': self._calculate_overall_metrics(
-                    expiry_analysis,
-                    market_metrics
-                )
-            }
-            
+            return expiry_analysis
+        
         except Exception as e:
-            logger.error(f"Options chain analysis error: {e}")
+            logger.error(f"Options chain analysis error: {e}", exc_info=True)
             return {}
-
     def _analyze_single_expiry(self,
                              expiry: str,
                              expiry_data: Dict[str, Any],
