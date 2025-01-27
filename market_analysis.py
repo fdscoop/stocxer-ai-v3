@@ -966,39 +966,88 @@ class OptionsDataAnalyzer:
             return {}
         
     def _analyze_single_expiry(self, 
-                            expiry: str,
-                            expiry_data: Dict[str, Any],
-                            current_price: float,
-                            market_metrics: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze options data for a single expiry"""
+                                expiry: str,
+                                expiry_data: Dict[str, Any],
+                                current_price: float,
+                                market_metrics: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Comprehensively analyze options for a specific expiration date.
+        
+        Args:
+            expiry: Expiration date string
+            expiry_data: Dictionary containing options data
+            current_price: Current market price
+            market_metrics: Market-wide metrics
+        
+        Returns:
+            Comprehensive analysis of options for the specified expiry
+        """
         try:
+            # Validate input data structure
+            if not isinstance(expiry_data, dict):
+                logger.warning(f"Invalid expiry data structure for {expiry}")
+                return {}
+
+            # Safely extract calls and puts
             calls = expiry_data.get('calls', {})
             puts = expiry_data.get('puts', {})
-            
+
+            # Identify unique strikes
+            call_strikes = set(calls.keys())
+            put_strikes = set(puts.keys())
+            all_strikes = call_strikes.union(put_strikes)
+
+            # Comprehensive strikes analysis
             strikes_analysis = {}
-            for strike in set(calls.keys()).union(puts.keys()):
+            for strike in all_strikes:
+                call_data = calls.get(strike, {})
+                put_data = puts.get(strike, {})
+
+                # Skip if no data for the strike
+                if not call_data and not put_data:
+                    logger.info(f"No data for strike {strike} in expiry {expiry}")
+                    continue
+
                 strike_analysis = self._analyze_strike(
                     strike,
-                    calls.get(strike, {}),
-                    puts.get(strike, {}),
+                    call_data,
+                    put_data,
                     current_price
                 )
-                strikes_analysis[strike] = strike_analysis
-            
+                
+                # Only add if analysis successful
+                if strike_analysis:
+                    strikes_analysis[strike] = strike_analysis
+
+            # Compute expiry-level metrics
+            expiry_metrics = self._calculate_expiry_metrics(
+                calls, puts, market_metrics
+            )
+
+            # Identify optimal strikes
+            optimal_strikes = self._select_optimal_strikes(
+                strikes_analysis,
+                current_price
+            )
+
             return {
                 'strikes_analysis': strikes_analysis,
-                'expiry_metrics': self._calculate_expiry_metrics(
-                    calls, puts, market_metrics
-                ),
-                'optimal_strikes': self._select_optimal_strikes(
-                    strikes_analysis,
-                    current_price
-                )
+                'expiry_metrics': expiry_metrics,
+                'optimal_strikes': optimal_strikes,
+                'total_strikes': len(strikes_analysis),
+                'expiry_date': expiry
             }
         
         except Exception as e:
-            logger.error(f"Single expiry analysis error: {e}")
-            return {}
+            logger.error(
+                f"Comprehensive expiry analysis error for {expiry}: {e}", 
+                exc_info=True
+            )
+            return {
+                'error': str(e),
+                'expiry': expiry,
+                'error_type': type(e).__name__
+            }
 
     def _analyze_strike(self,
                     strike: str,
@@ -1006,7 +1055,7 @@ class OptionsDataAnalyzer:
                     put_data: Dict[str, Any],
                     current_price: float) -> Dict[str, Any]:
         """
-        Analyze an individual option strike price.
+        Analyze individual strike price options.
         
         Args:
             strike: Strike price as a string
@@ -1030,28 +1079,63 @@ class OptionsDataAnalyzer:
                 logger.warning(f"Invalid current price: {current_price}")
                 return {}
 
+            # Comprehensive strike analysis
             return {
                 'strike_price': strike_price,
                 'moneyness': self._calculate_moneyness(strike_price, current_price),
-                'call': {
-                    'ltp': float(call_data.get('ltp', 0)),
-                    'volume': int(call_data.get('tradeVolume', 0)),
-                    'oi': int(call_data.get('opnInterest', 0)),
-                    'depth': call_data.get('depth', {}),
-                    'implied_volatility': call_data.get('impliedVolatility', None)
-                },
-                'put': {
-                    'ltp': float(put_data.get('ltp', 0)),
-                    'volume': int(put_data.get('tradeVolume', 0)),
-                    'oi': int(put_data.get('opnInterest', 0)),
-                    'depth': put_data.get('depth', {}),
-                    'implied_volatility': put_data.get('impliedVolatility', None)
-                }
+                'call': self._process_option_data(call_data, 'CALL'),
+                'put': self._process_option_data(put_data, 'PUT'),
+                'spread_analysis': self._analyze_strike_spread(call_data, put_data)
             }
+        
         except Exception as e:
-            logger.error(f"Unexpected error in strike analysis: {e}")
+            logger.error(f"Strike analysis error for strike {strike}: {e}")
             return {}
 
+    def _process_option_data(self, option_data: Dict[str, Any], option_type: str) -> Dict[str, Any]:
+        """
+        Process and enhance individual option data.
+        
+        Args:
+            option_data: Raw option data dictionary
+            option_type: Type of option (CALL/PUT)
+        
+        Returns:
+            Processed and enriched option data
+        """
+        if not option_data:
+            return {}
+
+        return {
+            'ltp': float(option_data.get('ltp', 0)),
+            'volume': int(option_data.get('tradeVolume', 0)),
+            'open_interest': int(option_data.get('opnInterest', 0)),
+            'depth': option_data.get('depth', {}),
+            'option_type': option_type,
+            'implied_volatility': option_data.get('impliedVolatility', None)
+        }
+
+    def _analyze_strike_spread(self, call_data: Dict[str, Any], put_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Analyze spread between call and put options.
+        
+        Args:
+            call_data: Call option data
+            put_data: Put option data
+        
+        Returns:
+            Spread analysis metrics
+        """
+        call_ltp = float(call_data.get('ltp', 0))
+        put_ltp = float(put_data.get('ltp', 0))
+
+        return {
+            'call_ltp': call_ltp,
+            'put_ltp': put_ltp,
+            'spread': abs(call_ltp - put_ltp),
+            'spread_percentage': (abs(call_ltp - put_ltp) / ((call_ltp + put_ltp) / 2)) * 100 if call_ltp and put_ltp else None
+        }
+        
     def _calculate_moneyness(self, strike: float, current_price: float) -> str:
         """Calculate option moneyness"""
         diff_percent = ((strike - current_price) / current_price) * 100

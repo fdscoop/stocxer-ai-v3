@@ -23,9 +23,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def validate_market_data(payload: Dict[str, Any]) -> bool:
-    """Validate incoming market data payload"""
     try:
-        # Check base structure
+        # Retain existing base structure validation
         required_components = [
             'current_market',
             'historical_data',
@@ -37,36 +36,64 @@ def validate_market_data(payload: Dict[str, Any]) -> bool:
             logger.error(f"Missing required components in payload")
             return False
 
-        # Validate current_market structure
+        # Existing specific validations (keep these)
         current_market = payload['current_market']
         required_market_fields = ['index', 'vix', 'futures', 'options']
         if not all(field in current_market for field in required_market_fields):
             logger.error(f"Missing required fields in current_market")
             return False
 
-        # Validate historical_data structure
+        # Existing historical data validation (keep this)
         historical_data = payload['historical_data']
         required_historical = ['index', 'vix', 'futures']
         if not all(data in historical_data for data in required_historical):
             logger.error(f"Missing required historical data")
             return False
 
-        # Validate options_structure
+        # Existing options structure base validation (keep this)
         options_structure = payload['options_structure']
         if not all(key in options_structure for key in ['options', 'byExpiry']):
             logger.error(f"Invalid options structure")
             return False
 
-        # Validate market_metrics
+        # Existing market metrics validation (keep this)
         market_metrics = payload['market_metrics']
         required_metrics = ['volume_pcr', 'oi_pcr', 'total_volumes', 'total_oi']
         if not all(metric in market_metrics for metric in required_metrics):
             logger.error(f"Missing required market metrics")
             return False
 
+        # NEW: Enhanced Options Structure Validation
+        if 'byExpiry' not in options_structure:
+            logger.error("Missing 'byExpiry' in options structure")
+            return False
+        
+        for expiry, expiry_data in options_structure['byExpiry'].items():
+            # Validate expiry data structure
+            if not isinstance(expiry_data, dict):
+                logger.error(f"Invalid expiry data for {expiry}")
+                return False
+            
+            # Ensure both 'calls' and 'puts' keys exist
+            calls = expiry_data.get('calls', {})
+            puts = expiry_data.get('puts', {})
+            
+            # Log warnings for incomplete data
+            if not calls and not puts:
+                logger.warning(f"No option data found for expiry {expiry}")
+            
+            # Validate individual strike details
+            for option_type, options in [('calls', calls), ('puts', puts)]:
+                for strike, strike_data in options.items():
+                    required_keys = ['symbol', 'strikePrice', 'optionType', 'exchange']
+                    if not all(key in strike_data for key in required_keys):
+                        logger.error(f"Incomplete {option_type} data for strike {strike}")
+                        return False
+
         return True
+    
     except Exception as e:
-        logger.error(f"Validation error: {str(e)}")
+        logger.error(f"Comprehensive payload validation error: {e}")
         return False
 
 class MarketAnalysisAPI:
