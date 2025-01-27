@@ -752,36 +752,81 @@ class MarketAnalysisService:
                             expiry_data: Dict[str, Any],
                             current_price: float,
                             market_metrics: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze options data for a single expiry"""
+        """
+        Analyze options data for a specific expiry date.
+        
+        Args:
+            expiry: Expiration date string
+            expiry_data: Dictionary containing options data
+            current_price: Current market price
+            market_metrics: Market-wide metrics
+        
+        Returns:
+            Comprehensive analysis of options for the expiry
+        """
         try:
-            # Ensure consistent 4-space indentation
+            # Validate input data structure
+            if not isinstance(expiry_data, dict):
+                logger.warning(f"Invalid expiry data structure for {expiry}")
+                return {}
+
+            # Safely extract calls and puts
             calls = expiry_data.get('calls', {})
             puts = expiry_data.get('puts', {})
-            
+
+            # Identify unique strikes
+            call_strikes = set(calls.keys())
+            put_strikes = set(puts.keys())
+            all_strikes = call_strikes.union(put_strikes)
+
+            # Comprehensive strikes analysis
             strikes_analysis = {}
-            for strike in set(calls.keys()).union(puts.keys()):
+            for strike in all_strikes:
+                call_data = calls.get(strike, {})
+                put_data = puts.get(strike, {})
+
+                # Skip if no data for the strike
+                if not call_data and not put_data:
+                    continue
+
                 strike_analysis = self._analyze_strike(
                     strike,
-                    calls.get(strike, {}),
-                    puts.get(strike, {}),
+                    call_data,
+                    put_data,
                     current_price
                 )
-                strikes_analysis[strike] = strike_analysis
-            
+                
+                # Only add if analysis successful
+                if strike_analysis:
+                    strikes_analysis[strike] = strike_analysis
+
+            # Compute expiry-level metrics
+            expiry_metrics = self._calculate_expiry_metrics(
+                calls, puts, market_metrics
+            )
+
+            # Identify optimal strikes
+            optimal_strikes = self._select_optimal_strikes(
+                strikes_analysis,
+                current_price
+            )
+
             return {
                 'strikes_analysis': strikes_analysis,
-                'expiry_metrics': self._calculate_expiry_metrics(
-                    calls, puts, market_metrics
-                ),
-                'optimal_strikes': self._select_optimal_strikes(
-                    strikes_analysis,
-                    current_price
-                )
+                'expiry_metrics': expiry_metrics,
+                'optimal_strikes': optimal_strikes,
+                'total_strikes': len(strikes_analysis)
             }
         
         except Exception as e:
-            logger.error(f"Single expiry analysis error: {e}", exc_info=True)
-            return {}
+            logger.error(
+                f"Comprehensive expiry analysis error for {expiry}: {e}", 
+                exc_info=True
+            )
+            return {
+                'error': str(e),
+                'expiry': expiry
+            }
 
     def _analyze_single_option(self,
                              option_data: Dict[str, Any],
