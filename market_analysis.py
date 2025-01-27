@@ -748,12 +748,13 @@ class MarketAnalysisService:
             }
 
     def _analyze_single_expiry(self, 
-                              expiry: str,
-                              expiry_data: Dict[str, Any],
-                              current_price: float,
-                              vix: float) -> Dict[str, Any]:
+                            expiry: str,
+                            expiry_data: Dict[str, Any],
+                            current_price: float,
+                            market_metrics: Dict[str, Any]) -> Dict[str, Any]:
+        """Analyze options data for a single expiry"""
         try:
-            # Ensure consistent indentation
+            # Ensure consistent 4-space indentation
             calls = expiry_data.get('calls', {})
             puts = expiry_data.get('puts', {})
             
@@ -770,14 +771,14 @@ class MarketAnalysisService:
             return {
                 'strikes_analysis': strikes_analysis,
                 'expiry_metrics': self._calculate_expiry_metrics(
-                    calls, puts, {}  # Placeholder for market_metrics
+                    calls, puts, market_metrics
                 ),
                 'optimal_strikes': self._select_optimal_strikes(
                     strikes_analysis,
                     current_price
                 )
             }
-            
+        
         except Exception as e:
             logger.error(f"Single expiry analysis error: {e}", exc_info=True)
             return {}
