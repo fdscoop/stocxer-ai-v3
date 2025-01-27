@@ -753,7 +753,7 @@ class MarketAnalysisService:
                             current_price: float,
                             market_metrics: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Analyze options data for a specific expiry date.
+        Comprehensively analyze options for a specific expiration date.
         
         Args:
             expiry: Expiration date string
@@ -762,7 +762,7 @@ class MarketAnalysisService:
             market_metrics: Market-wide metrics
         
         Returns:
-            Comprehensive analysis of options for the expiry
+            Comprehensive analysis of options for the specified expiry
         """
         try:
             # Validate input data structure
@@ -787,6 +787,7 @@ class MarketAnalysisService:
 
                 # Skip if no data for the strike
                 if not call_data and not put_data:
+                    logger.info(f"No data for strike {strike} in expiry {expiry}")
                     continue
 
                 strike_analysis = self._analyze_strike(
@@ -815,7 +816,8 @@ class MarketAnalysisService:
                 'strikes_analysis': strikes_analysis,
                 'expiry_metrics': expiry_metrics,
                 'optimal_strikes': optimal_strikes,
-                'total_strikes': len(strikes_analysis)
+                'total_strikes': len(strikes_analysis),
+                'expiry_date': expiry
             }
         
         except Exception as e:
@@ -825,7 +827,8 @@ class MarketAnalysisService:
             )
             return {
                 'error': str(e),
-                'expiry': expiry
+                'expiry': expiry,
+                'error_type': type(e).__name__
             }
 
     def _analyze_single_option(self,
